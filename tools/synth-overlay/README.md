@@ -39,6 +39,7 @@ Chrome extension that adds a live "fair value" layer on Polymarket market pages 
 
 2. **Open the exact URL** in Chrome (with the extension loaded from `extension/`):
    - Daily (mock): `https://polymarket.com/event/bitcoin-up-or-down-on-february-26`
+   - Hourly (mock): `https://polymarket.com/event/bitcoin-up-or-down-february-25-6pm-et`
    - The extension reads the slug from the path and calls the API. If the API returned 200 in step 1, the **badge** is appended to the page (near the first element with class containing "market" or "outcome", or `main`, or the top of the body).
 
 3. **Interaction:**
