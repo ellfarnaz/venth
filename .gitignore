@@ -30,6 +30,9 @@ Thumbs.db
 # Pytest
 .pytest_cache/
 
+# PR review sandboxes
+.sandbox-pr-*/
+
 # Distribution
 *.egg
 *.whl
