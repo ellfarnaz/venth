@@ -3,7 +3,7 @@ EdgeAnalyzer: consolidated dual-horizon edge analysis with confidence scoring
 and human-readable signal explanations using Synth forecast percentiles.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 
 from edge import (
@@ -18,15 +18,6 @@ from edge import (
 @dataclass
 class HorizonEdge:
     horizon: str
-    edge_pct: float
-    signal: str
-    synth_prob: float
-    market_prob: float
-
-
-@dataclass
-class BracketEdge:
-    title: str
     edge_pct: float
     signal: str
     synth_prob: float
@@ -188,7 +179,7 @@ class EdgeAnalyzer:
             if abs(float(b.get("synth_probability", 0)) - float(b.get("polymarket_probability", 0))) > 0.005
         ]
         explanation = self._build_range_explanation(
-            title, edge_pct, signal, mispriced, confidence
+            title, edge_pct, signal, len(mispriced), len(all_brackets), confidence
         )
         invalidation = self._build_range_invalidation(
             selected_bracket, signal
@@ -216,7 +207,8 @@ class EdgeAnalyzer:
         title: str,
         edge_pct: float,
         signal: str,
-        mispriced_brackets: list[dict],
+        mispriced_count: int,
+        total_count: int,
         confidence: float,
     ) -> str:
         parts = []
@@ -231,10 +223,9 @@ class EdgeAnalyzer:
                 f"Bracket {title}: Synth assigns {direction} probability "
                 f"than Polymarket by {abs(edge_pct):.1f}pp."
             )
-        if len(mispriced_brackets) > 1:
+        if mispriced_count > 1:
             parts.append(
-                f"{len(mispriced_brackets)} of {len(mispriced_brackets)} "
-                f"brackets show mispricing."
+                f"{mispriced_count} of {total_count} brackets show mispricing."
             )
         if confidence >= 0.7:
             parts.append("Forecast distribution is narrow — high confidence.")
