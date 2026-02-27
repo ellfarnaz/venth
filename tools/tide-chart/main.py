@@ -93,13 +93,18 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
             "hoverinfo": "skip",
         })
 
-        # Median line
+        # Median line - pre-format hover text (d3-format unreliable in unified hover)
         current_price = metrics[asset]["current_price"]
-        median_nominal = [v * current_price / 100 for v in median]
+        hover_text = []
+        for v in median:
+            nom = v * current_price / 100
+            sign_pct = "+" if v >= 0 else ""
+            sign_nom = "+" if nom >= 0 else "-"
+            hover_text.append(f"{sign_pct}{v:.2f}% ({sign_nom}${abs(nom):,.2f})")
         traces.append({
             "x": steps,
             "y": median,
-            "customdata": median_nominal,
+            "customdata": hover_text,
             "type": "scatter",
             "mode": "lines",
             "line": {"color": color["primary"], "width": 2},
@@ -107,7 +112,7 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
             "hovertemplate": (
                 f"<b>{label}</b><br>"
                 "Step %{x}<br>"
-                "Median: %{y:+.2f}% (%{customdata:+$,.2f})"
+                "Median: %{customdata}"
                 "<extra></extra>"
             ),
         })
