@@ -204,6 +204,23 @@ def test_generate_dashboard_html():
     # Check nominal values are displayed
     assert "nominal" in html
     assert "$" in html
+    # Check legendgroup is set for trace grouping
+    assert "legendgroup" in html
+    # Check 24h Bounds column
+    assert "24h Bounds" in html
+    assert "data-sort=\"bounds\"" in html
+    # Check column header tooltips
+    assert "data-tip=" in html
+    assert "50th percentile" in html
+    # Check time-based x-axis
+    assert "Time (ET)" in html
+    assert "%I:%M %p" in html
+    # Check legend toggle hint and rescale handler
+    assert "click legend to toggle assets" in html
+    assert "plotly_legendclick" in html
+    assert "yaxis.autorange" in html
+    # Check tooltip focus support
+    assert "data-tip]:focus-visible::after" in html
 
 
 def test_calculate_metrics_nominal_values():
@@ -230,6 +247,23 @@ def test_calculate_metrics_nominal_values():
         assert abs(m["range_nominal"] - (m["upside_nominal"] + m["downside_nominal"])) < 1e-10
 
 
+def test_calculate_metrics_projection_bounds():
+    """Verify price_high and price_low are computed correctly."""
+    client = _make_client()
+    data = fetch_all_data(client)
+    metrics = calculate_metrics(data)
+
+    for asset in EQUITIES:
+        m = metrics[asset]
+        final = data[asset]["percentiles"][-1]
+
+        assert "price_high" in m
+        assert "price_low" in m
+        assert abs(m["price_high"] - final["0.95"]) < 1e-10
+        assert abs(m["price_low"] - final["0.05"]) < 1e-10
+        assert m["price_high"] >= m["price_low"]
+
+
 def test_volatility_values():
     """Verify volatility values are positive floats."""
     client = _make_client()
@@ -253,6 +287,7 @@ if __name__ == "__main__":
     test_rank_equities_ascending()
     test_get_normalized_series()
     test_calculate_metrics_nominal_values()
+    test_calculate_metrics_projection_bounds()
     test_generate_dashboard_html()
     test_volatility_values()
     print("All tests passed!")

@@ -96,6 +96,8 @@ def calculate_metrics(data):
             "downside_nominal": downside_nominal,
             "skew_nominal": upside_nominal - downside_nominal,
             "range_nominal": upside_nominal + downside_nominal,
+            "price_high": current_price + upside_nominal,
+            "price_low": current_price - downside_nominal,
         }
     return metrics
 

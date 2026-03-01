@@ -11,7 +11,8 @@ import os
 import json
 import webbrowser
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
@@ -55,11 +56,19 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
     """
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
+    # Generate ET time axis (289 steps x 5 min = 24h)
+    et = ZoneInfo("America/New_York")
+    now_et = datetime.now(et)
+    time_points = [
+        (now_et + timedelta(minutes=i * 5)).strftime("%Y-%m-%dT%H:%M")
+        for i in range(289)
+    ]
+
     # Build Plotly traces for probability cones
     traces = []
     for asset in ["SPY", "NVDA", "TSLA", "AAPL", "GOOGL"]:
         series = normalized_series[asset]
-        steps = list(range(len(series)))
+        steps = time_points
         color = EQUITY_COLORS[asset]
         label = EQUITY_LABELS[asset]
 
@@ -75,6 +84,7 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
             "mode": "lines",
             "line": {"width": 0},
             "showlegend": False,
+            "legendgroup": asset,
             "name": f"{asset} 95th",
             "hoverinfo": "skip",
         })
@@ -89,6 +99,7 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
             "fill": "tonexty",
             "fillcolor": f"rgba({color['rgb']},0.12)",
             "showlegend": False,
+            "legendgroup": asset,
             "name": f"{asset} 5th",
             "hoverinfo": "skip",
         })
@@ -108,11 +119,12 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
             "type": "scatter",
             "mode": "lines",
             "line": {"color": color["primary"], "width": 2},
+            "legendgroup": asset,
             "name": f"{label} ({asset})",
             "hovertemplate": (
                 f"<b>{label}</b><br>"
-                "Step %{x}<br>"
-                "Median: %{customdata}"
+                "%{{x|%I:%M %p}}<br>"
+                "Median: %{{customdata}}"
                 "<extra></extra>"
             ),
         })
@@ -139,7 +151,7 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
         rel_skew = "-" if asset == "SPY" else fmt_val(m["relative_skew"])
 
         table_rows += f"""
-        <tr data-median="{m['median_move']}" data-vol="{m['volatility']}" data-skew="{m['skew']}" data-range="{m['range_pct']}" data-rel-median="{m.get('relative_median', 0)}" data-rel-skew="{m.get('relative_skew', 0)}">
+        <tr data-median="{m['median_move']}" data-vol="{m['volatility']}" data-skew="{m['skew']}" data-range="{m['range_pct']}" data-bounds="{m['price_low']}" data-rel-median="{m.get('relative_median', 0)}" data-rel-skew="{m.get('relative_skew', 0)}">
             <td class="rank-cell">{rank_idx}</td>
             <td class="asset-cell">
                 <span class="asset-dot" style="background:{color}"></span>
@@ -151,6 +163,7 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
             <td>{m['volatility']:.2f}</td>
             <td>{fmt_val(m['skew'], m['skew_nominal'])}</td>
             <td>{m['range_pct']:.3f}% <span class="nominal">(${m['range_nominal']:,.2f})</span></td>
+            <td>${m['price_low']:,.2f} - ${m['price_high']:,.2f}</td>
             <td>{rel_median}</td>
             <td>{rel_skew}</td>
         </tr>"""
@@ -295,10 +308,10 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
   }}
 
   .insight-label {{
-    font-size: 10px;
+    font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 1.2px;
-    color: var(--text-muted);
+    letter-spacing: 1px;
+    color: var(--text-secondary);
     margin-bottom: 6px;
     font-weight: 500;
   }}
@@ -311,7 +324,7 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
 
   .insight-value.bullish {{ color: var(--positive); }}
   .insight-value.bearish {{ color: var(--negative); }}
-  .insight-value.mixed {{ color: var(--text-secondary); }}
+  .insight-value.mixed {{ color: var(--text-primary); }}
 
   /* Chart section */
   .chart-container {{
@@ -335,11 +348,11 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
   }}
 
   .section-title {{
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-secondary);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
     text-transform: uppercase;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.6px;
   }}
 
   .section-line {{
@@ -385,7 +398,6 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 20px;
-    overflow-x: auto;
     transition: box-shadow 0.3s ease;
   }}
 
@@ -415,8 +427,8 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
   thead th:first-child {{ padding-left: 16px; }}
 
   /* Visual separator before "vs SPY" group */
-  thead th:nth-child(8),
-  tbody td:nth-child(8) {{
+  thead th:nth-child(9),
+  tbody td:nth-child(9) {{
     border-left: 1px solid var(--border);
     padding-left: 12px;
   }}
@@ -482,29 +494,86 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
     cursor: pointer;
     user-select: none;
     position: relative;
-    padding-right: 18px !important;
   }}
 
-  .sortable::after {{
-    content: '\u2195';
-    position: absolute;
-    right: 2px;
-    opacity: 0.3;
-    font-size: 9px;
+  .sortable .sort-arrow {{
+    display: inline-block;
+    font-size: 12px;
+    opacity: 0.25;
+    margin-left: 3px;
+    letter-spacing: -2px;
+    transition: opacity 0.15s ease, color 0.15s ease;
+    vertical-align: middle;
   }}
 
-  .sortable.asc::after {{
-    content: '\u2191';
-    opacity: 0.8;
+  .sortable:hover .sort-arrow {{
+    opacity: 0.5;
   }}
 
-  .sortable.desc::after {{
-    content: '\u2193';
-    opacity: 0.8;
+  .sortable.asc .sort-arrow {{
+    opacity: 0.9;
+    color: var(--accent);
+  }}
+
+  .sortable.desc .sort-arrow {{
+    opacity: 0.9;
+    color: var(--accent);
   }}
 
   .sortable:hover {{
     color: var(--accent);
+  }}
+
+  /* Column header tooltips */
+  th[data-tip]::before {{
+    content: '';
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-bottom-color: rgba(232,212,77,0.35);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease 0.05s;
+    z-index: 11;
+  }}
+
+  th[data-tip]::after {{
+    content: attr(data-tip);
+    position: absolute;
+    top: calc(100% + 11px);
+    left: 50%;
+    transform: translateX(-50%) translateY(2px);
+    background: var(--bg-deep);
+    border: 1px solid rgba(232,212,77,0.2);
+    color: var(--text-primary);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0.2px;
+    line-height: 1.4;
+    padding: 8px 14px;
+    border-radius: 6px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease 0.05s, transform 0.2s ease 0.05s;
+    z-index: 10;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(232,212,77,0.06);
+  }}
+
+  th[data-tip]:hover::before,
+  th[data-tip]:focus-visible::before,
+  th[data-tip]:hover::after,
+  th[data-tip]:focus-visible::after {{
+    opacity: 1;
+  }}
+
+  th[data-tip]:hover::after,
+  th[data-tip]:focus-visible::after {{
+    transform: translateX(-50%) translateY(0);
   }}
 
   .positive {{ color: var(--positive); }}
@@ -540,6 +609,7 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
     .title {{ font-size: 22px; }}
     .dashboard {{ padding: 16px 12px 32px; }}
     #cone-chart {{ height: 320px; }}
+    .table-container {{ overflow-x: auto; }}
   }}
 </style>
 </head>
@@ -575,7 +645,7 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
       <span class="section-line"></span>
     </div>
     <div id="cone-chart"></div>
-    <div class="chart-hint">scroll to zoom &middot; drag to pan &middot; double-click to reset</div>
+    <div class="chart-hint">click legend to toggle assets &middot; scroll to zoom &middot; drag to pan &middot; double-click to reset</div>
   </div>
 
   <div class="table-container">
@@ -589,12 +659,13 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
           <th>#</th>
           <th>Asset</th>
           <th>Price</th>
-          <th class="sortable" data-sort="median" tabindex="0" role="columnheader" aria-sort="none">Median Move</th>
-          <th class="sortable" data-sort="vol" tabindex="0" role="columnheader" aria-sort="none">Volatility</th>
-          <th class="sortable" data-sort="skew" tabindex="0" role="columnheader" aria-sort="none">Skew</th>
-          <th class="sortable" data-sort="range" tabindex="0" role="columnheader" aria-sort="none">Range</th>
-          <th class="sortable" data-sort="rel-median" tabindex="0" role="columnheader" aria-sort="none">vs SPY</th>
-          <th class="sortable" data-sort="rel-skew" tabindex="0" role="columnheader" aria-sort="none">Skew vs SPY</th>
+          <th class="sortable" data-sort="median" data-tip="Expected 24h price change at 50th percentile" tabindex="0" role="columnheader" aria-sort="none">Median Move<span class="sort-arrow">\u25B4\u25BE</span></th>
+          <th class="sortable" data-sort="vol" data-tip="Forecasted average volatility over 24h" tabindex="0" role="columnheader" aria-sort="none">Volatility<span class="sort-arrow">\u25B4\u25BE</span></th>
+          <th class="sortable" data-sort="skew" data-tip="Upside minus downside - positive means bullish bias" tabindex="0" role="columnheader" aria-sort="none">Skew<span class="sort-arrow">\u25B4\u25BE</span></th>
+          <th class="sortable" data-sort="range" data-tip="Total width of 5th to 95th percentile band" tabindex="0" role="columnheader" aria-sort="none">Range<span class="sort-arrow">\u25B4\u25BE</span></th>
+          <th class="sortable" data-sort="bounds" data-tip="Projected price at 5th and 95th percentile" tabindex="0" role="columnheader" aria-sort="none">24h Bounds<span class="sort-arrow">\u25B4\u25BE</span></th>
+          <th class="sortable" data-sort="rel-median" data-tip="Median move relative to S&amp;P 500" tabindex="0" role="columnheader" aria-sort="none">vs SPY<span class="sort-arrow">\u25B4\u25BE</span></th>
+          <th class="sortable" data-sort="rel-skew" data-tip="Directional skew relative to S&amp;P 500" tabindex="0" role="columnheader" aria-sort="none">Skew vs SPY<span class="sort-arrow">\u25B4\u25BE</span></th>
         </tr>
       </thead>
       <tbody>
@@ -622,9 +693,10 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
     }},
     margin: {{ t: 8, r: 16, b: 40, l: 48 }},
     xaxis: {{
-      title: {{ text: 'Time Steps (5-min intervals)', font: {{ size: 10 }} }},
+      title: {{ text: 'Time (ET)', font: {{ size: 10 }} }},
       gridcolor: 'rgba(30,42,64,0.7)',
       zerolinecolor: 'rgba(30,42,64,0.9)',
+      tickformat: '%I:%M %p',
       tickfont: {{ family: 'IBM Plex Mono, monospace', size: 10 }}
     }},
     yaxis: {{
@@ -644,6 +716,7 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
       font: {{ size: 11 }},
       itemwidth: 30
     }},
+    dragmode: 'pan',
     hovermode: 'x unified',
     hoverlabel: {{
       bgcolor: '#111827',
@@ -660,6 +733,19 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
   }};
 
   Plotly.newPlot('cone-chart', traces, layout, config);
+
+  // Rescale y-axis after legend toggle (show/hide)
+  var chart = document.getElementById('cone-chart');
+  chart.on('plotly_legendclick', function() {{
+    setTimeout(function() {{
+      Plotly.relayout('cone-chart', {{ 'yaxis.autorange': true }});
+    }}, 100);
+  }});
+  chart.on('plotly_legenddoubleclick', function() {{
+    setTimeout(function() {{
+      Plotly.relayout('cone-chart', {{ 'yaxis.autorange': true }});
+    }}, 100);
+  }});
 
   // Sortable table
   (function() {{
@@ -680,9 +766,13 @@ def generate_dashboard_html(normalized_series, metrics, ranked):
       headers.forEach(function(h) {{
         h.classList.remove('asc', 'desc');
         h.setAttribute('aria-sort', 'none');
+        var arrow = h.querySelector('.sort-arrow');
+        if (arrow) arrow.textContent = '\u25B4\u25BE';
       }});
       th.classList.add(currentDir);
       th.setAttribute('aria-sort', currentDir === 'desc' ? 'descending' : 'ascending');
+      var activeArrow = th.querySelector('.sort-arrow');
+      if (activeArrow) activeArrow.textContent = currentDir === 'asc' ? '\u25B4' : '\u25BE';
 
       var tbody = table.querySelector('tbody');
       var rows = Array.from(tbody.querySelectorAll('tr'));
